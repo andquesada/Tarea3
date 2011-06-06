@@ -20,6 +20,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <pthread.h>
+
 #define BUFSIZE 8096
 #define ERROR 42
 #define SORRY 43
@@ -40,6 +42,18 @@ struct {
    {"html", "text/html"},
    {0, 0}
 };
+
+typedef struct par_web_s {
+   int fd;
+   int hit;
+} par_web_t;
+
+int num_threads;
+pthread_t **threads;
+void **params;
+pthread_mutex_t **mutexes;
+
+void *web(void *params);
 
 #endif	/* NWEB_H */
 
