@@ -1,6 +1,27 @@
-#include <stdbool.h>
-
 #include "nweb.h"
+
+void print_usage()
+{
+   int i;
+
+   (void) printf("hint: nweb Port-Number Top-Directory\n\n"
+                 "\tnweb is a small and very safe mini web server\n"
+                 "\tnweb only servers out file/web pages with extensions named below\n"
+                 "\t and only from the named directory or its sub-directories.\n"
+                 "\tThere is no fancy features = safe and secure.\n\n"
+                 "\tExample: nweb 8181 /home/nwebdir &\n\n"
+                 "\tOnly Supports:");
+
+   for (i = 0; extensions[i].ext != 0; i++)
+   {
+      (void) printf(" %s", extensions[i].ext);
+   }
+
+   (void) printf("\n\tNot Supported: URLs including \"..\", Java, Javascript, CGI\n"
+                 "\tNot Supported: directories / /etc /bin /lib /tmp /usr /dev /sbin \n"
+                 "\tNo warranty given or implied\n\tNigel Griffiths nag@uk.ibm.com\n"
+                 );
+}
 
 void nweb_log(int type,
               char *s1,
@@ -230,6 +251,8 @@ void *web(void *p)
 int main(int argc,
          char **argv)
 {
+   int c;
+
    int num_threads;
    pthread_t **threads;
 
@@ -252,38 +275,67 @@ int main(int argc,
 
    if (argc < 3 || argc > 3 || !strcmp(argv[1], "-?"))
    {
-      (void) printf("hint: nweb Port-Number Top-Directory\n\n"
-                    "\tnweb is a small and very safe mini web server\n"
-                    "\tnweb only servers out file/web pages with extensions named below\n"
-                    "\t and only from the named directory or its sub-directories.\n"
-                    "\tThere is no fancy features = safe and secure.\n\n"
-                    "\tExample: nweb 8181 /home/nwebdir &\n\n"
-                    "\tOnly Supports:");
-      for (i = 0; extensions[i].ext != 0; i++)
-      {
-         (void) printf(" %s", extensions[i].ext);
-      }
-
-      (void) printf("\n\tNot Supported: URLs including \"..\", Java, Javascript, CGI\n"
-                    "\tNot Supported: directories / /etc /bin /lib /tmp /usr /dev /sbin \n"
-                    "\tNo warranty given or implied\n\tNigel Griffiths nag@uk.ibm.com\n"
-                    );
+      print_usage();
       exit(0);
    }
 
-   if (!strncmp(argv[2], "/", 2) || !strncmp(argv[2], "/etc", 5) ||
-       !strncmp(argv[2], "/bin", 5) || !strncmp(argv[2], "/lib", 5) ||
-       !strncmp(argv[2], "/tmp", 5) || !strncmp(argv[2], "/usr", 5) ||
-       !strncmp(argv[2], "/dev", 5) || !strncmp(argv[2], "/sbin", 6))
+   //if the specified option does not exist, that case is evaluated in the switch
+   opterr = 0;
+   while ((c = getopt(argc, argv, OPTIONS)) != -1)
    {
-      (void) printf("ERROR: Bad top directory %s, see nweb -?\n", argv[2]);
-      exit(3);
-   }
+      switch (c) {
+         case PORT_ARG:
+            port = atoi(optarg);
 
-   if (chdir(argv[2]) == -1)
-   {
-      (void) printf("ERROR: Can't Change to directory %s\n", argv[2]);
-      exit(4);
+            if (port < 0 || port > 60000)
+            {
+               nweb_log(ERROR,
+                        "Invalid port number (try 1->60000)",
+                        optarg,
+                        0);
+               exit(3);
+            }
+
+            break;
+
+         case FOLDER_ARG:
+            if (!strncmp(optarg, "/", 2)     || !strncmp(optarg, "/etc", 5) ||
+                !strncmp(optarg, "/bin", 5)  || !strncmp(optarg, "/lib", 5) ||
+                !strncmp(optarg, "/tmp", 5)  || !strncmp(optarg, "/usr", 5) ||
+                !strncmp(optarg, "/dev", 5)  || !strncmp(optarg, "/sbin", 6))
+            {
+               (void) printf("ERROR: Bad top directory %s, see nweb -?\n",
+                             optarg);
+               exit(3);
+            }
+            else if (chdir(optarg) == -1)
+            {
+               (void) printf("ERROR: Can't Change to directory %s\n",
+                             optarg);
+               exit(4);
+            }
+
+            break;
+
+         case NUM_THREADS_ARG:
+            num_threads = atoi(optarg);
+
+            if (num_threads == 0)
+            {
+               (void) printf("ERROR: Invalid number of threads.\n",
+                             optarg);
+            }
+
+            break;
+
+         case '?':
+            print_usage();
+            exit(0);
+
+         default:
+            print_usage();
+            exit(3);
+      }
    }
 
 	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -325,17 +377,6 @@ int main(int argc,
       exit(3);
    }
 
-   port = atoi(argv[1]);
-
-   if (port < 0 || port > 60000)
-   {
-      nweb_log(ERROR,
-               "Invalid port number (try 1->60000)",
-               argv[1],
-               0);
-      exit(3);
-   }
-
    serv_addr.sin_family       = AF_INET;
    serv_addr.sin_addr.s_addr  = htonl(INADDR_ANY);
    serv_addr.sin_port         = htons(port);
@@ -372,8 +413,7 @@ int main(int argc,
    param.mutex_fd = &mutex_param;
    ptr_param      = (void *) &param;
 
-   num_threads = 3;
-   threads     = malloc(num_threads * sizeof (pthread_t));
+   threads = malloc(num_threads * sizeof (pthread_t));
    for (i = 0; i < num_threads; i++)
    {
       pthread_create(threads[i],

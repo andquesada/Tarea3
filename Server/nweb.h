@@ -19,13 +19,17 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
+#include <stdbool.h>
 #include <pthread.h>
 
-#define BUFSIZE 8096
-#define ERROR 42
-#define SORRY 43
-#define LOG   44
+#define BUFSIZE         8096
+#define ERROR           42
+#define SORRY           43
+#define LOG             44
+#define OPTIONS         "p:f:n:h::"
+#define PORT_ARG        'p'
+#define FOLDER_ARG      'f'
+#define NUM_THREADS_ARG 'n'
 
 struct {
    char *ext;
@@ -50,5 +54,7 @@ typedef struct par_web_s {
 } par_web_t;
 
 void *web(void *params);
+void nweb_log(int type, char *s1, char *s2, int num);
+void print_usage();
 
 #endif	/* NWEB_H */
