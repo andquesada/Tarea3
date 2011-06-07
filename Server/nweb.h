@@ -52,4 +52,3 @@ typedef struct par_web_s {
 void *web(void *params);
 
 #endif	/* NWEB_H */
-
