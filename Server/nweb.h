@@ -44,14 +44,10 @@ struct {
 };
 
 typedef struct par_web_s {
-   int fd;
-   int hit;
+   pthread_cond_t *cond_wait;
+   pthread_mutex_t *mutex_fd;
+   int *fd;
 } par_web_t;
-
-int num_threads;
-pthread_t **threads;
-void **params;
-pthread_mutex_t **mutexes;
 
 void *web(void *params);
 

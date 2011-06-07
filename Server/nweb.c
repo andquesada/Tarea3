@@ -13,11 +13,10 @@ void nweb_log(int type,
    switch (type) {
       case ERROR:
          (void) sprintf(log_buffer,
-                        "ERROR: %s:%s Errno=%d exiting pid=%d",
+                        "ERROR: %s:%s Errno=%d exiting.",
                         s1,
                         s2,
-                        errno,
-                        getpid());
+                        errno);
          break;
 
       case SORRY:
@@ -58,31 +57,31 @@ void nweb_log(int type,
 
       (void) close(fd);
    }
-
-   if (type == ERROR || type == SORRY)
-   {
-      exit(3);
-   }
 }
 /* this is a child web server process, so we can exit on errors */
 void *web(void *p)
 {
    bool loop;
-   loop = true;
+	 par_web_t *ptr_web;
+
+	int fd;
+  int hit;
+  int j, file_fd, buflen, len;
+  long i, ret;
+  char * fstr;
+  static char buffer[BUFSIZE + 1]; /* static so zero filled */
+
+   loop			= true;
+	 ptr_web	= p;
 
    while (loop)
    {
-      par_web_t *ptr_web;
-      int fd;
-      int hit;
-      int j, file_fd, buflen, len;
-      long i, ret;
-      char * fstr;
-      static char buffer[BUFSIZE + 1]; /* static so zero filled */
+			pthread_mutex_lock(ptr_web->mutex_fd);
+			pthread_cond_wait(ptr_web->cond_wait,
+								ptr_web->mutex_fd);
 
-      ptr_web  = p;
-      fd       = (* ptr_web).fd;
-      hit      = (* ptr_web).hit;
+			//the assigned socket handle is copied
+			fd = *ptr_web->fd;      
 
       ret = read(fd,
                  buffer,
@@ -94,6 +93,10 @@ void *web(void *p)
                   "failed to read browser request",
                   "",
                   fd);
+
+				 //put the thread to wait for signal again
+				 pthread_mutex_unlock(ptr_web->mutex_fd);				 
+				 continue;
       }
 
       if (ret > 0 && ret < BUFSIZE) /* return code is valid chars */
@@ -120,7 +123,14 @@ void *web(void *p)
 
       if (strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4))
       {
-         nweb_log(SORRY, "Only simple GET operation supported", buffer, fd);
+         nweb_log(SORRY, 
+					 "Only simple GET operation supported",
+					 buffer,
+					 fd);
+
+				 //put the thread to wait for signal again
+				 pthread_mutex_unlock(ptr_web->mutex_fd);
+				 continue;
       }
 
 
@@ -141,6 +151,10 @@ void *web(void *p)
                      "Parent directory (..) path names not supported",
                      buffer,
                      fd);
+
+										 //put the thread to wait for signal again
+				 pthread_mutex_unlock(ptr_web->mutex_fd);
+				 continue;
          }
       }
 
@@ -164,12 +178,27 @@ void *web(void *p)
          }
       }
 
-      if (fstr == 0)
-         nweb_log(SORRY, "file extension type not supported", buffer, fd);
+      if (fstr == 0) {
+         nweb_log(SORRY, 
+					 "file extension type not supported",
+					 buffer,
+					 fd);
+
+				 				 //put the thread to wait for signal again
+				 pthread_mutex_unlock(ptr_web->mutex_fd);
+				 continue;
+			}
 
       if ((file_fd = open(&buffer[5], O_RDONLY)) == -1) /* open the file for reading */
       {
-         nweb_log(SORRY, "failed to open file", &buffer[5], fd);
+         nweb_log(SORRY, 
+					 "failed to open file",
+					 &buffer[5],
+					 fd);
+
+				 				 //put the thread to wait for signal again
+				 pthread_mutex_unlock(ptr_web->mutex_fd);
+				 continue;
       }
 
       nweb_log(LOG,
@@ -193,21 +222,32 @@ void *web(void *p)
 
 #ifdef LINUX
       sleep(1); /* to allow socket to drain */
-#endif
+#endif			
    }
 }
 
 int main(int argc,
          char **argv)
 {
-   int i, port, pid, listen_fd, socket_fd, hit;
+	int num_threads;
+	pthread_t **threads;
+
+   int i, port, listen_fd, socket_fd;
    size_t length;
    static struct sockaddr_in cli_addr; /* static = initialised to zeros */
    static struct sockaddr_in serv_addr; /* static = initialised to zeros */
-   
+
+	 pthread_cond_t cond_wait;
    pthread_mutex_t mutex_param;
+	 int fd_param;
    par_web_t param;
    void * ptr_param;
+
+	 bool loop;
+
+	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	 //														PARAMETER VALIDATION
+	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    if (argc < 3 || argc > 3 || !strcmp(argv[1], "-?"))
    {
@@ -245,19 +285,29 @@ int main(int argc,
       exit(4);
    }
 
-   /* Become deamon + unstopable and no zombies children (= no wait()) */
-   if (fork() != 0)
-      return 0; /* parent returns OK to shell */
+	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	 //											DEAMONIZATION OF THE SERVER
+	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   (void) signal(SIGCLD, SIG_IGN); /* ignore child death */
-   (void) signal(SIGHUP, SIG_IGN); /* ignore terminal hangups */
+/*
+   // Become deamon + unstopable and no zombies children (= no wait())
+   if (fork() != 0)
+      return 0; // parent returns OK to shell
+
+   //(void) signal(SIGCLD, SIG_IGN); // ignore child death
+   //(void) signal(SIGHUP, SIG_IGN); // ignore terminal hangups
 
    for (i = 0; i < 32; i++)
    {
-      (void) close(i); /* close open files */
+      (void) close(i); // close open files
    }
 
-   (void) setpgrp(); /* break away from process group */
+   (void) setpgrp(); // break away from process group
+*/
+
+	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	 //												WEB SERVER PORT BIND
+	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    nweb_log(LOG,
             "nweb starting",
@@ -267,14 +317,22 @@ int main(int argc,
    /* setup the network socket */
    if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
    {
-      nweb_log(ERROR, "system call", "socket", 0);
+      nweb_log(ERROR, 
+				"system call",
+				"socket",
+				0);
+			exit(3);
    }
 
    port = atoi(argv[1]);
 
    if (port < 0 || port > 60000)
    {
-      nweb_log(ERROR, "Invalid port number (try 1->60000)", argv[1], 0);
+      nweb_log(ERROR, 
+				"Invalid port number (try 1->60000)",
+				argv[1],
+				0);
+			exit(3);
    }
 
    serv_addr.sin_family       = AF_INET;
@@ -283,7 +341,11 @@ int main(int argc,
 
    if (bind(listen_fd, (struct sockaddr *) &serv_addr, sizeof (serv_addr)) < 0)
    {
-      nweb_log(ERROR, "system call", "bind", 0);
+      nweb_log(ERROR,
+				"system call",
+				"bind",
+				0);
+			exit(3);
    }
 
    if (listen(listen_fd, 64) < 0)
@@ -292,23 +354,28 @@ int main(int argc,
                "system call",
                "listen",
                0);
+			exit(3);
    }
 
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    //                         THREADS INITIALIZATION
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   //params   = (void **) malloc(num_threads * sizeof(par_web_t));
-   threads  = malloc(num_threads * sizeof (pthread_t));
-   //mutexes  = malloc(num_threads * sizeof (pthread_mutex_t));
+	 pthread_cond_init(&cond_wait,
+	 NULL);
 
-   pthread_mutex_init(mutex_param,
+   pthread_mutex_init(&mutex_param,
                       NULL);
-   ptr_param = &param;
+	 
+	 param.fd				= &fd_param;
+	 param.mutex_fd	= &mutex_param;
+   ptr_param			= (void *) &param;
 
-   for (hit = 0; hit < num_threads; hit++)
+	 num_threads = 3;
+	 threads = malloc(num_threads * sizeof (pthread_t));
+   for (i = 0; i < num_threads; i++)
    {
-      pthread_create(&threads[hit],
+      pthread_create(threads[i],
                      NULL,
                      web,
                      ptr_param);
@@ -316,57 +383,40 @@ int main(int argc,
 
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   for (hit = 1;; hit++)
+	 loop = true;
+   while (loop)
    {
       length = sizeof (cli_addr);
-      if ((socket_fd = accept(listen_fd, (struct sockaddr *) &cli_addr, &length)) < 0)
-         nweb_log(ERROR, "system call", "accept", 0);
 
-      if ((pid = fork()) < 0)
-      {
-         nweb_log(ERROR, "system call", "fork", 0);
-      }
-      else
-      {
-         if (pid == 0)
-         { /* child */
-            (void) close(listen_fd);
+			//accept incoming connection requests
+      if ((socket_fd = accept(listen_fd, (struct sockaddr *) &cli_addr, &length)) < 0) {
+         nweb_log(ERROR, 
+					 "system call",
+					 "accept",
+					 0);
 
-            //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            //                SETTING OF THE THREAD PARAMETERS
-            //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            
-            pthread_mutex_lock(mutex_param);
+				 continue;
+			}
 
-            param.fd    = socket_fd;
-            param.hit   = hit;
 
-            pthread_mutex_unlock(mutex_param);
+		pthread_mutex_lock(&mutex_param);
 
-            //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		//copy the opened socket handle
+		fd_param = socket_fd;
 
-            //web(params[0]);
-         }
-         else
-         { /* parent */
-            (void) close(socket_fd);
-         }
-      }
+		//wake one thread up
+		pthread_cond_signal(&cond_wait);
+
+		pthread_mutex_unlock(&mutex_param);
    }
 
+	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	 //														RESOURCE FREE
+	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	 
+	 pthread_cond_destroy(&cond_wait);
+	 pthread_mutex_destroy(&mutex_param);
    free(threads);
-/*
-   free(params);
-*/
 
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   
-/*
-   for (hit = 0; hit < num_threads; hit++)
-   {
-      pthread_mutex_destroy(mutexes[hit]);
-   }
-
-   free(mutexes);
-*/
 }
