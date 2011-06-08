@@ -9,7 +9,7 @@ void print_usage()
                  "\tnweb only servers out file/web pages with extensions named below\n"
                  "\t and only from the named directory or its sub-directories.\n"
                  "\tThere is no fancy features = safe and secure.\n\n"
-								 "\tUsage: nweb -p port_number -f /path/to/files -n number_of_threads\n\n"
+                 "\tUsage: nweb -p port_number -f /path/to/files -n number_of_threads\n\n"
                  "\tExample: nweb -n 3 -f /home/nwebdir/ -p 3671\n\n"
                  "\tOnly Supports:");
 
@@ -94,14 +94,14 @@ void *web(void *p)
    char * fstr;
    static char buffer[BUFSIZE + 1]; /* static so zero filled */
 
-   loop     = true;
-   ptr_web  = p;
-	 fd				= 0;
+   loop = true;
+   ptr_web = p;
+   fd = 0;
 
    while (loop)
    {
-		  //the first thing is try to close the current socket
-		  close(fd);
+      //the first thing is try to close the current socket
+      close(fd);
 
       pthread_mutex_lock(ptr_web->mutex_fd);
       pthread_cond_wait(ptr_web->cond_wait,
@@ -191,8 +191,8 @@ void *web(void *p)
       }
 
       /* work out the file type and check we support it */
-      buf_len  = strlen(buffer);
-      fstr     = (char *) 0;
+      buf_len = strlen(buffer);
+      fstr = (char *) 0;
       for (i = 0; extensions[i].ext != 0; i++)
       {
          len = strlen(extensions[i].ext);
@@ -343,26 +343,6 @@ int main(int argc,
       }
    }
 
-	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	 //											DEAMONIZATION OF THE SERVER
-	 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-/*
-      // Become deamon + unstopable and no zombies children (= no wait())
-      if (fork() != 0)
-         return 0; // parent returns OK to shell
-
-      //(void) signal(SIGCLD, SIG_IGN); // ignore child death
-      //(void) signal(SIGHUP, SIG_IGN); // ignore terminal hangups
-
-      for (i = 0; i < 32; i++)
-      {
-         (void) close(i); // close open files
-      }
-
-      (void) setpgrp(); // break away from process group
-    */
-
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    //												WEB SERVER PORT BIND
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -414,15 +394,15 @@ int main(int argc,
    pthread_mutex_init(&mutex_param,
                       NULL);
 
-	 param.cond_wait	= &cond_wait;
-   param.fd					= &fd_param;
-   param.mutex_fd		= &mutex_param;
-   ptr_param				= (void *) &param;
+   param.cond_wait   = &cond_wait;
+   param.fd          = &fd_param;
+   param.mutex_fd    = &mutex_param;
+   ptr_param         = (void *) &param;
 
    threads = (pthread_t **) malloc(num_threads * sizeof (pthread_t *));
    for (i = 0; i < num_threads; i++)
    {
-		  threads[i] = (pthread_t *) malloc(sizeof(pthread_t));
+      threads[i] = (pthread_t *) malloc(sizeof (pthread_t));
 
       pthread_create(threads[i],
                      NULL,
@@ -467,7 +447,7 @@ int main(int argc,
    pthread_mutex_destroy(&mutex_param);
 
 
-	 for (i = 0; i < num_threads; i++)
+   for (i = 0; i < num_threads; i++)
    {
 
       free(threads[i]);
