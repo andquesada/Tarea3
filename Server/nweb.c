@@ -9,7 +9,8 @@ void print_usage()
                  "\tnweb only servers out file/web pages with extensions named below\n"
                  "\t and only from the named directory or its sub-directories.\n"
                  "\tThere is no fancy features = safe and secure.\n\n"
-                 "\tExample: nweb 8181 /home/nwebdir &\n\n"
+								 "\tUsage: nweb -p port_number -f /path/to/files -n number_of_threads\n\n"
+                 "\tExample: nweb -n 3 -f /home/nwebdir/ -p 3671\n\n"
                  "\tOnly Supports:");
 
    for (i = 0; extensions[i].ext != 0; i++)
