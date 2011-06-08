@@ -95,9 +95,13 @@ void *web(void *p)
 
    loop     = true;
    ptr_web  = p;
+	 fd				= 0;
 
    while (loop)
    {
+		  //the first thing is try to close the current socket
+		  close(fd);
+
       pthread_mutex_lock(ptr_web->mutex_fd);
       pthread_cond_wait(ptr_web->cond_wait,
                         ptr_web->mutex_fd);
@@ -273,7 +277,7 @@ int main(int argc,
    //														PARAMETER VALIDATION
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   if (argc < 3 || argc > 3 || !strcmp(argv[1], "-?"))
+   if (argc != MIN_AMOUNT_ARG || !strcmp(argv[1], "-?"))
    {
       print_usage();
       exit(0);
@@ -409,13 +413,16 @@ int main(int argc,
    pthread_mutex_init(&mutex_param,
                       NULL);
 
-   param.fd       = &fd_param;
-   param.mutex_fd = &mutex_param;
-   ptr_param      = (void *) &param;
+	 param.cond_wait	= &cond_wait;
+   param.fd					= &fd_param;
+   param.mutex_fd		= &mutex_param;
+   ptr_param				= (void *) &param;
 
-   threads = malloc(num_threads * sizeof (pthread_t));
+   threads = (pthread_t **) malloc(num_threads * sizeof (pthread_t *));
    for (i = 0; i < num_threads; i++)
    {
+		  threads[i] = (pthread_t *) malloc(sizeof(pthread_t));
+
       pthread_create(threads[i],
                      NULL,
                      web,
@@ -457,6 +464,14 @@ int main(int argc,
 
    pthread_cond_destroy(&cond_wait);
    pthread_mutex_destroy(&mutex_param);
+
+
+	 for (i = 0; i < num_threads; i++)
+   {
+
+      free(threads[i]);
+   }
+
    free(threads);
 
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

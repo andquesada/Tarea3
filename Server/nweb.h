@@ -30,6 +30,7 @@
 #define PORT_ARG        'p'
 #define FOLDER_ARG      'f'
 #define NUM_THREADS_ARG 'n'
+#define MIN_AMOUNT_ARG  7
 
 struct {
    char *ext;
