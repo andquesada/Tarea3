@@ -1,0 +1,7 @@
+El cliente se encuentra dentro del folder Client.
+
+El servidor se encuentra dentro del folder Server.
+
+Hasta el momento el único intento de incluir threads ha sido en el servidor.
+
+Para compilar los fuentes del servidor digite: make all
