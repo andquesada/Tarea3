@@ -49,8 +49,9 @@ struct {
 };
 
 typedef struct par_web_s {
-   pthread_cond_t *cond_wait;
-   pthread_mutex_t *mutex_fd;
+   pthread_cond_t    *cond_wait;
+   pthread_cond_t    *cond_wait_server;
+   pthread_mutex_t   *mutex_fd;
    int *fd;
 } par_web_t;
 

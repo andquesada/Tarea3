@@ -94,9 +94,9 @@ void *web(void *p)
    char * fstr;
    static char buffer[BUFSIZE + 1]; /* static so zero filled */
 
-   loop = true;
-   ptr_web = p;
-   fd = 0;
+   loop     = true;
+   ptr_web  = p;
+   fd       = 0;
 
    while (loop)
    {
@@ -104,8 +104,13 @@ void *web(void *p)
       close(fd);
 
       pthread_mutex_lock(ptr_web->mutex_fd);
+
+      //blocked for the server to accept a connection
       pthread_cond_wait(ptr_web->cond_wait,
                         ptr_web->mutex_fd);
+
+      //signal de the server to unlock
+      pthread_cond_signal(ptr_web->cond_wait_server);
 
       //the assigned socket handle is copied
       fd = *ptr_web->fd;
@@ -267,6 +272,7 @@ int main(int argc,
    static struct sockaddr_in serv_addr; /* static = initialised to zeros */
 
    pthread_cond_t cond_wait;
+   pthread_cond_t cond_wait_server;
    pthread_mutex_t mutex_param;
    int fd_param;
    par_web_t param;
@@ -391,13 +397,17 @@ int main(int argc,
    pthread_cond_init(&cond_wait,
                      NULL);
 
+   pthread_cond_init(&cond_wait_server,
+                     NULL);
+
    pthread_mutex_init(&mutex_param,
                       NULL);
 
-   param.cond_wait   = &cond_wait;
-   param.fd          = &fd_param;
-   param.mutex_fd    = &mutex_param;
-   ptr_param         = (void *) &param;
+   param.cond_wait         = &cond_wait;
+   param.cond_wait_server  = &cond_wait_server;
+   param.fd                = &fd_param;
+   param.mutex_fd          = &mutex_param;
+   ptr_param               = (void *) &param;
 
    threads = (pthread_t **) malloc(num_threads * sizeof (pthread_t *));
    for (i = 0; i < num_threads; i++)
@@ -417,6 +427,8 @@ int main(int argc,
    {
       length = sizeof (cli_addr);
 
+      pthread_mutex_lock(&mutex_param);
+
       //accept incoming connection requests
       if ((socket_fd = accept(listen_fd, (struct sockaddr *) &cli_addr, &length)) < 0)
       {
@@ -428,13 +440,15 @@ int main(int argc,
          continue;
       }
 
-      pthread_mutex_lock(&mutex_param);
-
       //copy the opened socket handle
       fd_param = socket_fd;
 
       //wake one thread up
       pthread_cond_signal(&cond_wait);
+
+      //wait for a thread to be ready, otherwise a deadlock will happen
+      pthread_cond_wait(&cond_wait_server,
+                        &mutex_param);
 
       pthread_mutex_unlock(&mutex_param);
    }
@@ -444,8 +458,8 @@ int main(int argc,
    //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    pthread_cond_destroy(&cond_wait);
+   pthread_cond_destroy(&cond_wait_server);
    pthread_mutex_destroy(&mutex_param);
-
 
    for (i = 0; i < num_threads; i++)
    {

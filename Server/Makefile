@@ -6,3 +6,4 @@ all: nweb.c
 
 clean:
 	rm -fr server
+	rm -fr nweb.log
